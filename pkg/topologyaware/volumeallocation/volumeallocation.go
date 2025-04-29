@@ -1,8 +1,9 @@
-package ranksorting
+package volumeallocation
 
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -11,15 +12,19 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/klog/v2"
 	"k8s.io/kubernetes/pkg/scheduler/framework"
-	frameworkruntime "k8s.io/kubernetes/pkg/scheduler/framework/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	allocationrequestv1 "github.com/MohamedGouaouri/ms-app-controller/api/v1"
+	pluginconfig "sigs.k8s.io/scheduler-plugins/apis/config"
+	"sigs.k8s.io/scheduler-plugins/pkg/util"
 )
 
 // NodeNumber is
 type TopologyAwareVolumeAllocation struct {
 	client.Client
-	logger klog.Logger
-	handle framework.Handle
+	logger              klog.Logger
+	handle              framework.Handle
+	EdgeNetworkTopology string
 }
 
 var (
@@ -40,6 +45,16 @@ func init() {
 // Name returns the name of the plugin. It is used in logs, etc.
 func (ta *TopologyAwareVolumeAllocation) Name() string {
 	return Name
+}
+
+// getArgs : returns the arguments for the TopologicalSort plugin.
+func getArgs(obj runtime.Object) (*pluginconfig.TopologyAwareVolumeAllocationArgs, error) {
+	TopologyAwareVolumeAllocationArgs, ok := obj.(*pluginconfig.TopologyAwareVolumeAllocationArgs)
+	if !ok {
+		return nil, fmt.Errorf("want args to be of type TopologyAwareVolumeAllocationArgs, got %T", obj)
+	}
+
+	return TopologyAwareVolumeAllocationArgs, nil
 }
 
 func (ta *TopologyAwareVolumeAllocation) EventsToRegister() []framework.ClusterEvent {
@@ -83,20 +98,23 @@ func (ta *TopologyAwareVolumeAllocation) PreBind(ctx context.Context, state *fra
 }
 
 // New initializes a new plugin and returns it.
-func New(ctx context.Context, arg runtime.Object, h framework.Handle) (framework.Plugin, error) {
-	typedArg := TopologyAwareVolumeAllocationArgs{}
-	if arg != nil {
-		err := frameworkruntime.DecodeInto(arg, &typedArg)
-		if err != nil {
-			return nil, err
-		}
-		klog.Info("TopologyAwareVolumeAllocationArgs is successfully applied")
-	}
-	return &TopologyAwareVolumeAllocation{}, nil
-}
+func New(ctx context.Context, obj runtime.Object, handle framework.Handle) (framework.Plugin, error) {
+	logger := klog.FromContext(ctx).WithValues("plugin", Name)
+	logger.V(4).Info("Creating new instance of the TopologicalSort plugin")
 
-//
-//nolint:revive
-type TopologyAwareVolumeAllocationArgs struct {
-	metav1.TypeMeta
+	args, err := getArgs(obj)
+	if err != nil {
+		return nil, err
+	}
+
+	c, _, err := util.NewClientWithCachedReader(ctx, handle.KubeConfig(), scheme)
+	if err != nil {
+		return nil, err
+	}
+	return &TopologyAwareVolumeAllocation{
+		Client:              c,
+		handle:              handle,
+		logger:              logger,
+		EdgeNetworkTopology: args.EdgeNetworkTopology,
+	}, nil
 }

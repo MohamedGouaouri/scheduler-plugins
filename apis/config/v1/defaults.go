@@ -250,3 +250,8 @@ func SetDefaults_SySchedArgs(obj *SySchedArgs) {
 		obj.DefaultProfileName = &DefaultSySchedProfileName
 	}
 }
+
+// SetDefaults_TopologicalSortArgs sets the default parameters for TopologyAwareVolumeAllocationArgs plugin.
+func SetDefaults_TopologyAwareVolumeAllocationArgs(obj *TopologyAwareVolumeAllocationArgs) {
+	obj.EdgeNetworkTopology = ""
+}

@@ -6,18 +6,20 @@ import (
 	"fmt"
 	"strconv"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/klog/v2"
 	"k8s.io/kubernetes/pkg/scheduler/framework"
-	frameworkruntime "k8s.io/kubernetes/pkg/scheduler/framework/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/scheduler-plugins/pkg/util"
 )
 
 // NodeNumber is
 type RankBasedSorting struct {
+	client.Client
 	logger klog.Logger
+	handle framework.Handle
 }
 
 var (
@@ -40,6 +42,15 @@ func (ta *RankBasedSorting) Name() string {
 	return Name
 }
 
+// // getArgs : returns the arguments for the TopologicalSort plugin.
+// func getArgs(obj runtime.Object) (*pluginconfig.RankBasedSortingArgs, error) {
+// 	RankBasedSortingArgs, ok := obj.(*pluginconfig.RankBasedSortingArgs)
+// 	if !ok {
+// 		return nil, fmt.Errorf("want args to be of type RankBasedSortingArgs, got %T", obj)
+// 	}
+
+//		return RankBasedSortingArgs, nil
+//	}
 func (ta *RankBasedSorting) Less(pInfo1 *framework.QueuedPodInfo, pInfo2 *framework.QueuedPodInfo) bool {
 	logger := ta.logger.WithValues("ExtensionPoint", "Less")
 	// TODO: Change this example code
@@ -104,20 +115,22 @@ func (ta *RankBasedSorting) ScoreExtensions() framework.ScoreExtensions {
 }
 
 // New initializes a new plugin and returns it.
-func New(ctx context.Context, arg runtime.Object, h framework.Handle) (framework.Plugin, error) {
-	typedArg := TopologyAwareArgs{}
-	if arg != nil {
-		err := frameworkruntime.DecodeInto(arg, &typedArg)
-		if err != nil {
-			return nil, err
-		}
-		klog.Info("NodeNumberArgs is successfully applied")
-	}
-	return &RankBasedSorting{}, nil
-}
+func New(ctx context.Context, obj runtime.Object, handle framework.Handle) (framework.Plugin, error) {
+	logger := klog.FromContext(ctx).WithValues("plugin", Name)
+	logger.V(4).Info("Creating new instance of the TopologicalSort plugin")
 
-//
-//nolint:revive
-type TopologyAwareArgs struct {
-	metav1.TypeMeta
+	// args, err := getArgs(obj)
+	// if err != nil {
+	// 	return nil, err
+	// }
+
+	c, _, err := util.NewClientWithCachedReader(ctx, handle.KubeConfig(), scheme)
+	if err != nil {
+		return nil, err
+	}
+	return &RankBasedSorting{
+		Client: c,
+		handle: handle,
+		logger: logger,
+	}, nil
 }

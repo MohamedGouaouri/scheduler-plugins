@@ -298,3 +298,12 @@ type PowerModel struct {
 	// Power = K0 + K1 * e ^(K2 * x) : where x is utilisation
 	// Idle power of node will be K0 + K1
 }
+
+type RankBasedSortingArgs struct {
+	metav1.TypeMeta
+}
+
+type TopologyAwareVolumeAllocationArgs struct {
+	metav1.TypeMeta
+	EdgeNetworkTopology string
+}

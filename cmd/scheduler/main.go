@@ -34,6 +34,8 @@ import (
 	"sigs.k8s.io/scheduler-plugins/pkg/preemptiontoleration"
 	"sigs.k8s.io/scheduler-plugins/pkg/qos"
 	"sigs.k8s.io/scheduler-plugins/pkg/sysched"
+	"sigs.k8s.io/scheduler-plugins/pkg/topologyaware/ranksorting"
+	"sigs.k8s.io/scheduler-plugins/pkg/topologyaware/volumeallocation"
 	"sigs.k8s.io/scheduler-plugins/pkg/trimaran/loadvariationriskbalancing"
 	"sigs.k8s.io/scheduler-plugins/pkg/trimaran/lowriskovercommitment"
 	"sigs.k8s.io/scheduler-plugins/pkg/trimaran/peaks"
@@ -64,6 +66,9 @@ func main() {
 		// app.WithPlugin(crossnodepreemption.Name, crossnodepreemption.New),
 		app.WithPlugin(podstate.Name, podstate.New),
 		app.WithPlugin(qos.Name, qos.New),
+
+		app.WithPlugin(ranksorting.Name, ranksorting.New),
+		app.WithPlugin(volumeallocation.Name, volumeallocation.New),
 	)
 
 	code := cli.Run(command)
