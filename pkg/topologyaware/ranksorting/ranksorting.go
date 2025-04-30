@@ -86,8 +86,8 @@ func (ta *RankBasedSorting) Less(pInfo1 *framework.QueuedPodInfo, pInfo2 *framew
 	ms1Rank := pInfo1.Pod.Annotations["topology-aware-scheduling.cs.phd.uqtr/rank"]
 	ms2Rank := pInfo2.Pod.Annotations["topology-aware-scheduling.cs.phd.uqtr/rank"]
 	if ms1Rank == "" || ms2Rank == "" {
-		// logger.Error(errors.New("Pods dont have a rank"), "Pods dont have a rank")
-		fmt.Printf("%s", "Pods dont have a rank")
+		logger.Error(errors.New("pods dont have a rank"), "pods dont have a rank")
+		fmt.Printf("%s", "pods dont have a rank")
 		return s.Less(pInfo1, pInfo2)
 
 	}

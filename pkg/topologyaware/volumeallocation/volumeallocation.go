@@ -74,14 +74,14 @@ var ErrNotExpectedPreScoreState = errors.New("unexpected pre score state")
 func (ta *TopologyAwareVolumeAllocation) PreBind(ctx context.Context, state *framework.CycleState, p *v1.Pod, nodeName string) *framework.Status {
 	ta.logger.Info("Invoking PreBind plugin")
 
-	// Extract annotations from Pod
 	msName := p.Annotations["topology-aware-scheduling.cs.phd.uqtr/microservice"]
 	volSizeStr := p.Annotations["topology-aware-scheduling.cs.phd.uqtr/volume_size"]
+	claimName := p.Annotations["topology-aware-scheduling.cs.phd.uqtr/claim_name"]
 
 	// // Create the VolumeAllocation object
 	allocationRequest := topologycrdv1.VolumeAllocation{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      p.Name + "-pvc",
+			Name:      claimName,
 			Namespace: p.Namespace,
 		},
 		Spec: topologycrdv1.VolumeAllocationSpec{
@@ -108,12 +108,12 @@ func (ta *TopologyAwareVolumeAllocation) PreBind(ctx context.Context, state *fra
 	volumeAllocation := ta.DistributedVolumeAllocation(ctx, allocationRequest, edgeTopologyName, 3) // TODO, i need to change kmax to be configurable
 	annotation := ""
 	for edge, allocation := range volumeAllocation {
-		annotation += fmt.Sprintf("%s:%d", edge, allocation) + ","
+		annotation += fmt.Sprintf("%s:%d,", edge, allocation)
 	}
 	annotations["volumeallocation"] = annotation
 	pvc := &corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:        allocationRequest.Name + "-pvc",
+			Name:        allocationRequest.Name,
 			Namespace:   allocationRequest.Namespace,
 			Annotations: annotations,
 		},
