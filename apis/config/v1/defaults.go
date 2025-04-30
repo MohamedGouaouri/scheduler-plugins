@@ -251,7 +251,7 @@ func SetDefaults_SySchedArgs(obj *SySchedArgs) {
 	}
 }
 
-// SetDefaults_TopologicalSortArgs sets the default parameters for TopologyAwareVolumeAllocationArgs plugin.
+// SetDefaults_TopologyAwareVolumeAllocationArgs sets the default parameters for TopologyAwareVolumeAllocationArgs plugin.
 func SetDefaults_TopologyAwareVolumeAllocationArgs(obj *TopologyAwareVolumeAllocationArgs) {
 	obj.EdgeNetworkTopology = ""
 }

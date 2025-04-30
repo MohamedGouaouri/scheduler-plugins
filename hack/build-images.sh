@@ -63,3 +63,7 @@ sudo docker build \
   --build-arg DISTROLESS_BASE_IMAGE=${DISTROLESS_BASE_IMAGE} \
   --build-arg CGO_ENABLED=0 \
   ${EXTRA_ARGS:-} ${TAG_FLAG:-} ${REGISTRY}/${CONTROLLER_IMAGE} .
+
+
+# Pushing images
+# sudo docker push ${REGISTRY}/${CONTROLLER_IMAGE} 

@@ -27,8 +27,9 @@ endif
 # REGISTRY is the container registry to push
 # into. The default is to push to the staging
 # registry, not production(registry.k8s.io).
-REGISTRY?=gcr.io/k8s-staging-scheduler-plugins
-RELEASE_VERSION?=v$(shell date +%Y%m%d)-$(shell git describe --tags --match "v*")
+REGISTRY?=linuxtitan/k8s-scheduler-plugins
+# RELEASE_VERSION?=v$(shell date +%Y%m%d)-$(shell git describe --tags --match "v*")
+RELEASE_VERSION?=latest
 RELEASE_IMAGE:=kube-scheduler:$(RELEASE_VERSION)
 RELEASE_CONTROLLER_IMAGE:=controller:$(RELEASE_VERSION)
 GO_BASE_IMAGE?=golang:$(GO_VERSION)

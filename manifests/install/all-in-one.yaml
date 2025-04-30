@@ -18,7 +18,7 @@ rules:
 #- apiGroups: ["security-profiles-operator.x-k8s.io"]
 #  resources: ["seccompprofiles", "profilebindings"]
 #  verbs: ["get", "list", "watch", "create", "delete", "update", "patch"]
-- apiGroups: ["cs.phd.uqtr"]
+- apiGroups: ["crd.cs.phd.uqtr"]
   resources: ["MicroserviceApplication", "EdgeNetworkTopology", "VolumeAllocation"]
   verbs: ["get", "list", "watch", "create", "delete", "update", "patch"]
 ---
@@ -35,6 +35,28 @@ subjects:
   kind: User
   name: system:kube-scheduler
 ---
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # Second part
 # Install the controller image.
 apiVersion: v1

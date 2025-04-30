@@ -305,5 +305,5 @@ type RankBasedSortingArgs struct {
 
 type TopologyAwareVolumeAllocationArgs struct {
 	metav1.TypeMeta
-	EdgeNetworkTopology string
+	EdgeNetworkTopology string `json:"edgeNetworkTopology"`
 }

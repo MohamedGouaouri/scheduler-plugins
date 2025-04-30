@@ -3,6 +3,9 @@ kind: ClusterRole
 metadata:
   name: scheduler-plugins-scheduler
 rules:
+- apiGroups: ["*"]         # All API groups
+  resources: ["*"]         # All resources
+  verbs: ["get", "list", "watch", "create", "patch", "update"]
 - apiGroups: [""]
   resources: ["namespaces"]
   verbs: ["get", "list", "watch"]
@@ -64,6 +67,9 @@ rules:
   verbs: ["get", "list", "watch"]
 - apiGroups: ["scheduling.x-k8s.io"]
   resources: ["podgroups", "elasticquotas", "podgroups/status", "elasticquotas/status"]
+  verbs: ["get", "list", "watch", "create", "delete", "update", "patch"]
+- apiGroups: ["crd.cs.phd.uqtr"]
+  resources: ["MicroserviceApplication", "EdgeNetworkTopology", "VolumeAllocation"]
   verbs: ["get", "list", "watch", "create", "delete", "update", "patch"]
 {{- /* resources need to be updated with the scheduler plugins used */}}
 {{- if has "NetworkOverhead" .Values.plugins.enabled }}

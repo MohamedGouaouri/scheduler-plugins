@@ -11,6 +11,7 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/klog/v2"
 	"k8s.io/kubernetes/pkg/scheduler/framework"
+	"k8s.io/kubernetes/pkg/scheduler/framework/plugins/queuesort"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/scheduler-plugins/pkg/util"
 )
@@ -62,13 +63,22 @@ func (ta *RankBasedSorting) Less(pInfo1 *framework.QueuedPodInfo, pInfo2 *framew
 
 	ms1 := pInfo1.Pod.Annotations["topology-aware-scheduling.cs.phd.uqtr/microservice"]
 	ms2 := pInfo2.Pod.Annotations["topology-aware-scheduling.cs.phd.uqtr/microservice"]
-
+	s := &queuesort.PrioritySort{}
 	if ms1 == "" || ms2 == "" {
-		// logger.Error(errors.New("Pods are not part of any microservice"), "Pods are not part of any microservice")
+		logger.Error(errors.New("pods are not part of any microservice"), "pods are not part of any microservice")
 		fmt.Printf("%s", "Pods are not part of any microservice")
-		return true
+		s := &queuesort.PrioritySort{}
+		return s.Less(pInfo1, pInfo2)
 	}
 	// TODO: Check if ms1 and ms2 are part of the same application, otherwise, sort the pods using priority sort algorithm
+
+	ms1App := pInfo1.Pod.Annotations["topology-aware-scheduling.cs.phd.uqtr/application"]
+	ms2App := pInfo2.Pod.Annotations["topology-aware-scheduling.cs.phd.uqtr/application"]
+	if ms1App == "" || ms2App == "" || ms1App != ms2App {
+		logger.Error(errors.New("pods are not part of the same application"), "pods are not part of the same application")
+		fmt.Printf("%s", "Pods are not part of the same applicatione")
+		return s.Less(pInfo1, pInfo2)
+	}
 
 	fmt.Println("Pods belong to the same MicroserviceApplication CR")
 
@@ -78,27 +88,27 @@ func (ta *RankBasedSorting) Less(pInfo1 *framework.QueuedPodInfo, pInfo2 *framew
 	if ms1Rank == "" || ms2Rank == "" {
 		// logger.Error(errors.New("Pods dont have a rank"), "Pods dont have a rank")
 		fmt.Printf("%s", "Pods dont have a rank")
+		return s.Less(pInfo1, pInfo2)
 
-		return true
 	}
 
 	ms1Ranki, err := strconv.Atoi(ms1Rank)
 	if err != nil {
-		// logger.Error(err, "Could convert ranks")
-		fmt.Printf("%s", "Could convert ranks")
+		logger.Error(err, "could not convert ranks")
+		fmt.Printf("%s", "could not convert ranks")
+		return s.Less(pInfo1, pInfo2)
 
-		return true
 	}
 	ms2Ranki, err := strconv.Atoi(ms2Rank)
 	if err != nil {
-		// logger.Error(err, "Could convert ranks")
-		fmt.Printf("%s", "Could convert ranks")
+		logger.Error(err, "could not convert ranks")
+		fmt.Printf("%s", "could not convert ranks")
+		return s.Less(pInfo1, pInfo2)
 
-		return true
 	}
 
 	fmt.Printf("Ranks: %d %d %v", ms1Ranki, ms2Ranki, ms1Ranki <= ms2Ranki)
-	return ms1Ranki > ms2Ranki
+	return ms1Ranki >= ms2Ranki
 }
 
 func (ta *RankBasedSorting) EventsToRegister() []framework.ClusterEvent {
