@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strconv"
 
 	corev1 "k8s.io/api/core/v1"
 
@@ -33,11 +34,13 @@ type TopologyAwareVolumeAllocation struct {
 }
 
 var (
-	_ framework.PreBindPlugin = &TopologyAwareVolumeAllocation{}
+	_ framework.PreBindPlugin  = &TopologyAwareVolumeAllocation{}
+	_ framework.PreScorePlugin = &TopologyAwareVolumeAllocation{}
 )
 
 const (
-	Name = "TopologyAwareVolumeAllocation"
+	Name                                  = "TopologyAwareVolumeAllocation"
+	TopologyAwareVolumeAllocationStateKey = "TopologyAwareVolumeAllocationStateKey"
 )
 
 var scheme = runtime.NewScheme()
@@ -70,6 +73,34 @@ func (ta *TopologyAwareVolumeAllocation) EventsToRegister() []framework.ClusterE
 }
 
 var ErrNotExpectedPreScoreState = errors.New("unexpected pre score state")
+
+// state computed at PreScore and used at prebind.
+type TopologyAwareVolumeAllocationState struct {
+	availableDiskCache map[string]int
+}
+
+// Clone implements the mandatory Clone interface. We don't really copy the data since
+// there is no need for that.
+func (s *TopologyAwareVolumeAllocationState) Clone() framework.StateData {
+	return s
+}
+
+// PreScore implements framework.PreScorePlugin.
+func (ta *TopologyAwareVolumeAllocation) PreScore(ctx context.Context, state *framework.CycleState, pod *v1.Pod, nodes []*framework.NodeInfo) *framework.Status {
+	topologyAwareVolumeAllocationState := &TopologyAwareVolumeAllocationState{
+		availableDiskCache: make(map[string]int),
+	}
+	for _, node := range nodes {
+		available_disk := node.Node().Annotations["topology-aware-scheduling.cs.phd.uqtr/available_disk"]
+		availableDisk, err := strconv.Atoi(available_disk)
+		if err != nil {
+			return framework.NewStatus(framework.Error)
+		}
+		topologyAwareVolumeAllocationState.availableDiskCache[node.GetName()] = availableDisk
+	}
+	state.Write(TopologyAwareVolumeAllocationStateKey, topologyAwareVolumeAllocationState)
+	return nil
+}
 
 func (ta *TopologyAwareVolumeAllocation) PreBind(ctx context.Context, state *framework.CycleState, p *v1.Pod, nodeName string) *framework.Status {
 	ta.logger.Info("Invoking PreBind plugin")
@@ -105,7 +136,7 @@ func (ta *TopologyAwareVolumeAllocation) PreBind(ctx context.Context, state *fra
 		Name:      ta.EdgeNetworkTopology,
 		Namespace: p.Namespace,
 	}
-	volumeAllocation := ta.DistributedVolumeAllocation(ctx, allocationRequest, edgeTopologyName, 3) // TODO, i need to change kmax to be configurable
+	volumeAllocation := ta.DistributedVolumeAllocation(ctx, state, allocationRequest, edgeTopologyName, 3) // TODO, i need to change kmax to be configurable
 	annotation := ""
 	for edge, allocation := range volumeAllocation {
 		annotation += fmt.Sprintf("%s:%d,", edge, allocation)
@@ -149,7 +180,7 @@ func (ta *TopologyAwareVolumeAllocation) PreBind(ctx context.Context, state *fra
 	return framework.NewStatus(framework.Success)
 }
 
-func (ta *TopologyAwareVolumeAllocation) DistributedVolumeAllocation(ctx context.Context, allocationRequest topologycrdv1.VolumeAllocation, edgeTopologyName types.NamespacedName, kMax int) map[string]int {
+func (ta *TopologyAwareVolumeAllocation) DistributedVolumeAllocation(ctx context.Context, state *framework.CycleState, allocationRequest topologycrdv1.VolumeAllocation, edgeTopologyName types.NamespacedName, kMax int) map[string]int {
 	var edgeNetworkTopology topologycrdv1.EdgeNetworkTopology
 
 	if err := ta.Get(ctx, edgeTopologyName, &edgeNetworkTopology); err != nil {
@@ -176,11 +207,11 @@ func (ta *TopologyAwareVolumeAllocation) DistributedVolumeAllocation(ctx context
 		sort.Strings(neighbors)
 
 		for _, e := range neighbors {
-			available := ta.GetAvailableDisk(e)
+			available := ta.GetAvailableDisk(state, e)
 			if remaining > 0 && available > 0 {
 				alloc := min(remaining, available)
 				result[e] += alloc
-				ta.UpdateDiskAvailability(e, available-alloc)
+				ta.UpdateDiskAvailability(state, e, available-alloc)
 				remaining -= alloc
 			}
 		}
@@ -224,13 +255,32 @@ func KHopNeighbors(edges []topologycrdv1.EdgeNode, start string, k int) []string
 	return current
 }
 
-func (ta *TopologyAwareVolumeAllocation) GetAvailableDisk(node string) int {
+func (ta *TopologyAwareVolumeAllocation) GetAvailableDisk(state *framework.CycleState, node string) int {
 	// TODO: Hook into actual storage monitoring or state cache
-	return 10240 // Placeholder: 10Gi in MB
+	stateData, err := state.Read(TopologyAwareVolumeAllocationStateKey)
+	if err != nil {
+		return 0
+	}
+	topologyAwareVolumeAllocationState, ok := stateData.(*TopologyAwareVolumeAllocationState)
+	if !ok {
+		return 0
+	}
+	return topologyAwareVolumeAllocationState.availableDiskCache[node]
 }
 
-func (ta *TopologyAwareVolumeAllocation) UpdateDiskAvailability(node string, newAvailable int) {
+func (ta *TopologyAwareVolumeAllocation) UpdateDiskAvailability(state *framework.CycleState, node string, newAvailable int) {
 	// TODO: Update the disk availability in the actual state or cache
+	// TODO: Make sure that this is no race condition
+	stateData, err := state.Read(TopologyAwareVolumeAllocationStateKey)
+	if err != nil {
+		return
+	}
+	topologyAwareVolumeAllocationState, ok := stateData.(*TopologyAwareVolumeAllocationState)
+	if !ok {
+		return
+	}
+	topologyAwareVolumeAllocationState.availableDiskCache[node] = newAvailable
+	state.Write(TopologyAwareVolumeAllocationStateKey, topologyAwareVolumeAllocationState)
 }
 
 // New initializes a new plugin and returns it.
