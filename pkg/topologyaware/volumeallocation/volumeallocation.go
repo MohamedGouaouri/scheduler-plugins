@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"strconv"
+	"sync"
 
 	corev1 "k8s.io/api/core/v1"
 
@@ -15,7 +16,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/client-go/informers"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/klog/v2"
 	"k8s.io/kubernetes/pkg/scheduler/framework"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -31,6 +34,7 @@ type TopologyAwareVolumeAllocation struct {
 	logger              klog.Logger
 	handle              framework.Handle
 	EdgeNetworkTopology string
+	PodRediness         sync.Map
 }
 
 var (
@@ -90,8 +94,15 @@ func (ta *TopologyAwareVolumeAllocation) PreScore(ctx context.Context, state *fr
 	topologyAwareVolumeAllocationState := &TopologyAwareVolumeAllocationState{
 		availableDiskCache: make(map[string]int),
 	}
+	// Wait for pod to finish sync
+	key := pod.Namespace + "/" + pod.Name
+	if _, ready := ta.PodRediness.Load(key); !ready {
+		klog.Infof("Pod %s is not ready for prescoring yet", key)
+		return framework.NewStatus(framework.Pending)
+	}
 	for _, node := range nodes {
 		available_disk := node.Node().Annotations["topology-aware-scheduling.cs.phd.uqtr/available_disk"]
+		ta.logger.Info(fmt.Sprintf("Available disk %s", available_disk))
 		availableDisk, err := strconv.Atoi(available_disk)
 		if err != nil {
 			return framework.NewStatus(framework.Error)
@@ -193,6 +204,7 @@ func (ta *TopologyAwareVolumeAllocation) DistributedVolumeAllocation(ctx context
 		ta.logger.Error(err, "unable to parse volume size")
 		return nil
 	}
+	// volumeQuantity.Value() returns size in bytes
 	blocks := int(volumeQuantity.Value() / (1024 * 1024)) // Convert bytes to MB
 
 	result := make(map[string]int)
@@ -280,7 +292,34 @@ func (ta *TopologyAwareVolumeAllocation) UpdateDiskAvailability(state *framework
 		return
 	}
 	topologyAwareVolumeAllocationState.availableDiskCache[node] = newAvailable
+	// Update node annotation
+	nodeObj, err := ta.handle.ClientSet().CoreV1().Nodes().Get(context.TODO(), node, metav1.GetOptions{})
+	if err != nil {
+		return
+	}
+	if nodeObj.Annotations == nil {
+		nodeObj.Annotations = make(map[string]string)
+	}
+
+	nodeObj.Annotations["topology-aware-scheduling.cs.phd.uqtr/available_disk"] = strconv.Itoa(newAvailable)
+	_, err = ta.handle.ClientSet().CoreV1().Nodes().Update(context.TODO(), nodeObj, metav1.UpdateOptions{})
+	if err != nil {
+		return
+	}
 	state.Write(TopologyAwareVolumeAllocationStateKey, topologyAwareVolumeAllocationState)
+}
+
+func (ta *TopologyAwareVolumeAllocation) handlePod(obj interface{}) {
+	pod, ok := obj.(*v1.Pod)
+	if !ok {
+		return
+	}
+	key := pod.Namespace + "/" + pod.Name
+	if _, ok := pod.Annotations["topology-aware-scheduling.cs.phd.uqtr/microservice"]; ok {
+		ta.PodRediness.Store(key, true)
+	} else {
+		ta.PodRediness.Delete(key)
+	}
 }
 
 // New initializes a new plugin and returns it.
@@ -298,11 +337,25 @@ func New(ctx context.Context, obj runtime.Object, handle framework.Handle) (fram
 		return nil, err
 	}
 	fmt.Println("K8s client", c, c == nil)
-	return &TopologyAwareVolumeAllocation{
+	var ta *TopologyAwareVolumeAllocation = &TopologyAwareVolumeAllocation{
 		Client: c,
 		handle: handle,
 		logger: logger,
 		// EdgeNetworkTopology: args.EdgeNetworkTopology,
 		EdgeNetworkTopology: "test-topology",
-	}, nil
+	}
+
+	sharedInformerFactory := informers.NewSharedInformerFactory(handle.ClientSet(), 0)
+	podInformer := sharedInformerFactory.Core().V1().Pods().Informer()
+	podInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    ta.handlePod,
+		UpdateFunc: func(oldObj, newObj interface{}) { ta.handlePod(newObj) },
+		DeleteFunc: func(obj interface{}) {
+			if pod, ok := obj.(*v1.Pod); ok {
+				ta.PodRediness.Delete(pod.Namespace + "/" + pod.Name)
+			}
+		},
+	})
+	go podInformer.Run(ctx.Done())
+	return ta, nil
 }

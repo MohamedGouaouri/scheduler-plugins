@@ -54,7 +54,7 @@ sudo docker build \
   --build-arg GO_BASE_IMAGE=${GO_BASE_IMAGE} \
   --build-arg DISTROLESS_BASE_IMAGE=${DISTROLESS_BASE_IMAGE} \
   --build-arg CGO_ENABLED=0 \
-  ${EXTRA_ARGS:-}  ${TAG_FLAG:-} ${REGISTRY}/${IMAGE} .
+  ${EXTRA_ARGS:-}  ${TAG_FLAG:-} ${REGISTRY}-${IMAGE} .
 
 sudo docker build \
   -f ${CONTROLLER_DIR}/Dockerfile \
@@ -62,7 +62,7 @@ sudo docker build \
   --build-arg GO_BASE_IMAGE=${GO_BASE_IMAGE} \
   --build-arg DISTROLESS_BASE_IMAGE=${DISTROLESS_BASE_IMAGE} \
   --build-arg CGO_ENABLED=0 \
-  ${EXTRA_ARGS:-} ${TAG_FLAG:-} ${REGISTRY}/${CONTROLLER_IMAGE} .
+  ${EXTRA_ARGS:-} ${TAG_FLAG:-} ${REGISTRY}-${CONTROLLER_IMAGE} .
 
 
 # Pushing images
